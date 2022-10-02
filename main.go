@@ -45,13 +45,14 @@ func goVisitor(doc C.EJDB_DOC, step *C.longlong) {
 	}
 }
 
-func Check(errorCode C.iwrc) {
+func Check(errorCode C.iwrc) error {
 	if errorCode != 0 {
-		_ = fmt.Sprintf("Error: %d\n", int(errorCode))
+		return fmt.Errorf("error code: %d", int(errorCode))
 	}
+	return nil
 }
 
-func (e *EJDB) Open(filename string) {
+func (e *EJDB) Open(filename string) error {
 	filenameCString := C.CString(filename)
 	opts := C.EJDB_OPTS{
 		kv: C.IWKV_OPTS{
@@ -65,9 +66,12 @@ func (e *EJDB) Open(filename string) {
 	}()
 
 	rc := C.ejdb_init()
-	Check(rc)
+	err := Check(rc)
+	if err != nil {
+		return err
+	}
 	rc = C.ejdb_open(&opts, &e.db)
-	Check(rc)
+	return Check(rc)
 }
 
 func (e *EJDB) Close() {
@@ -78,19 +82,26 @@ func (e *EJDB) GetMeta() string {
 	var meta C.JBL
 	rc := C.ejdb_get_meta(e.db, &meta)
 	defer C.jbl_destroy(&meta)
-	Check(rc)
+	err := Check(rc)
+	if err != nil {
+		print(err)
+		return ""
+	}
 	jsonString := jblTojson(meta)
 	return jsonString
 }
 
 func (e *EJDB) GetCollections() []string {
-	metaString := e.GetMeta()
+	var collectionNames []string
 	meta := J{}
+	metaString := e.GetMeta()
+	if metaString == "" {
+		return collectionNames
+	}
 	err := json.Unmarshal([]byte(metaString), &meta)
 	if err != nil {
-		return []string{}
+		return collectionNames
 	}
-	var collectionNames []string
 	for _, collectionJson := range meta["collections"].([]interface{}) {
 		coll := collectionJson.(J)
 		collectionNames = append(collectionNames, coll["name"].(string))
@@ -98,7 +109,7 @@ func (e *EJDB) GetCollections() []string {
 	return collectionNames
 }
 
-func (e *EJDB) MergeOrPut(collectionName string, patchJSON string, entryID int64) {
+func (e *EJDB) MergeOrPut(collectionName string, patchJSON string, entryID int64) error {
 	patchJSONCString := C.CString(patchJSON)
 	collectionCString := C.CString(collectionName)
 
@@ -108,10 +119,10 @@ func (e *EJDB) MergeOrPut(collectionName string, patchJSON string, entryID int64
 	}()
 
 	rc := C.ejdb_merge_or_put(e.db, collectionCString, patchJSONCString, C.int64_t(entryID))
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) PutNew(collectionName string, jsonData string) int64 {
+func (e *EJDB) PutNew(collectionName string, jsonData string) (int64, error) {
 	var jbl C.JBL
 	var id C.int64_t
 	jsonDataCString := C.CString(jsonData)
@@ -124,14 +135,16 @@ func (e *EJDB) PutNew(collectionName string, jsonData string) int64 {
 	}()
 
 	rc := C.jbl_from_json(&jbl, jsonDataCString)
-	Check(rc)
+	err := Check(rc)
+	if err != nil {
+		return -1, err
+	}
 	rc = C.ejdb_put_new(e.db, collectionCString, jbl, &id)
-	Check(rc)
 
-	return int64(id)
+	return int64(id), Check(rc)
 }
 
-func (e *EJDB) Put(collectionName string, jsonData string, id int64) {
+func (e *EJDB) Put(collectionName string, jsonData string, id int64) error {
 	var jbl C.JBL
 	jsonDataCString := C.CString(jsonData)
 	collectionCString := C.CString(collectionName)
@@ -143,12 +156,16 @@ func (e *EJDB) Put(collectionName string, jsonData string, id int64) {
 	}()
 
 	rc := C.jbl_from_json(&jbl, jsonDataCString)
-	Check(rc)
+	err := Check(rc)
+	if err != nil {
+		return err
+	}
 	rc = C.ejdb_put(e.db, collectionCString, jbl, C.int64_t(id))
-	Check(rc)
+	err = Check(rc)
+	return err
 }
 
-func (e *EJDB) Patch(collectionName string, patchJSON string, entryID int64) {
+func (e *EJDB) Patch(collectionName string, patchJSON string, entryID int64) error {
 	collectionCString := C.CString(collectionName)
 	pathJSONCString := C.CString(patchJSON)
 	defer func() {
@@ -156,21 +173,21 @@ func (e *EJDB) Patch(collectionName string, patchJSON string, entryID int64) {
 		C.free(unsafe.Pointer(pathJSONCString))
 	}()
 	rc := C.ejdb_patch(e.db, collectionCString, pathJSONCString, C.int64_t(entryID))
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) Update(collectionName string, query string, params J) {
+func (e *EJDB) Update(collectionName string, query string, params J) error {
 	q, free := newQuery(collectionName, query, params)
 	defer free()
 	rc := C.ejdb_update(e.db, q)
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) Del(collectionName string, entryID int64) {
+func (e *EJDB) Del(collectionName string, entryID int64) error {
 	collectionCString := C.CString(collectionName)
 	defer C.free(unsafe.Pointer(collectionCString))
 	rc := C.ejdb_del(e.db, collectionCString, C.int64_t(entryID))
-	Check(rc)
+	return Check(rc)
 }
 
 func (e *EJDB) GetByID(collectionName string, id int64) string {
@@ -182,12 +199,15 @@ func (e *EJDB) GetByID(collectionName string, id int64) string {
 	}()
 
 	rc := C.ejdb_get(e.db, collectionCString, C.int64_t(id), &jbl)
-	Check(rc)
+	err := Check(rc)
+	if err != nil {
+		return ""
+	}
 	jsonString := jblTojson(jbl)
 	return jsonString
 }
 
-func (e *EJDB) Get(collectionName string, query string, params J, visitor func(string)) {
+func (e *EJDB) Get(collectionName string, query string, params J, visitor func(string)) error {
 	var resultList C.EJDB_LIST
 	visitorCallback = visitor
 	q, free := newQuery(collectionName, query, params)
@@ -202,8 +222,7 @@ func (e *EJDB) Get(collectionName string, query string, params J, visitor func(s
 
 	rc := C.execute_query(e.db, q)
 	//rc := C.ejdb_list2(e.db, collectionCString, queryCString, limit, &resultList)
-	Check(rc)
-	return
+	return Check(rc)
 }
 
 func (e *EJDB) Count(collectionName string, query string, params J) int64 {
@@ -215,21 +234,21 @@ func (e *EJDB) Count(collectionName string, query string, params J) int64 {
 	return int64(countValue)
 }
 
-func (e *EJDB) EnsureCollection(collectionName string) {
+func (e *EJDB) EnsureCollection(collectionName string) error {
 	collectionCString := C.CString(collectionName)
 	defer C.free(unsafe.Pointer(collectionCString))
 	rc := C.ejdb_ensure_collection(e.db, collectionCString)
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) RemoveCollection(collectionName string) {
+func (e *EJDB) RemoveCollection(collectionName string) error {
 	collectionCString := C.CString(collectionName)
 	defer C.free(unsafe.Pointer(collectionCString))
 	rc := C.ejdb_remove_collection(e.db, collectionCString)
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) RenameCollection(oldName string, newName string) {
+func (e *EJDB) RenameCollection(oldName string, newName string) error {
 	oldNameCString := C.CString(oldName)
 	newNameCString := C.CString(newName)
 	defer func() {
@@ -237,10 +256,10 @@ func (e *EJDB) RenameCollection(oldName string, newName string) {
 		C.free(unsafe.Pointer(newNameCString))
 	}()
 	rc := C.ejdb_rename_collection(e.db, oldNameCString, newNameCString)
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) EnsureIndex(collectionName string, path string, mode IndexMode) {
+func (e *EJDB) EnsureIndex(collectionName string, path string, mode IndexMode) error {
 	collectionCString := C.CString(collectionName)
 	pathCString := C.CString(path)
 	defer func() {
@@ -248,10 +267,10 @@ func (e *EJDB) EnsureIndex(collectionName string, path string, mode IndexMode) {
 		C.free(unsafe.Pointer(pathCString))
 	}()
 	rc := C.ejdb_ensure_index(e.db, collectionCString, pathCString, C.ejdb_idx_mode_t(mode))
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) RemoveIndex(collectionName string, path string, mode IndexMode) {
+func (e *EJDB) RemoveIndex(collectionName string, path string, mode IndexMode) error {
 	collectionCString := C.CString(collectionName)
 	pathCString := C.CString(path)
 	defer func() {
@@ -259,18 +278,17 @@ func (e *EJDB) RemoveIndex(collectionName string, path string, mode IndexMode) {
 		C.free(unsafe.Pointer(pathCString))
 	}()
 	rc := C.ejdb_remove_index(e.db, collectionCString, pathCString, C.ejdb_idx_mode_t(mode))
-	Check(rc)
+	return Check(rc)
 }
 
-func (e *EJDB) OnlineBackup(targetFile string) uint64 {
+func (e *EJDB) OnlineBackup(targetFile string) (uint64, error) {
 	var timeStamp C.ulonglong
 	pathCString := C.CString(targetFile)
 	defer func() {
 		C.free(unsafe.Pointer(pathCString))
 	}()
 	rc := C.ejdb_online_backup(e.db, &timeStamp, pathCString)
-	Check(rc)
-	return uint64(timeStamp)
+	return uint64(timeStamp), Check(rc)
 }
 
 type IndexMode uint8
