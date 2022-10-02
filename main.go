@@ -24,7 +24,6 @@ package ejdb2
 // }
 import "C"
 import (
-	"encoding/json"
 	"fmt"
 	"unsafe"
 )
@@ -98,24 +97,6 @@ func (e *EJDB) GetMeta() string {
 	}
 	jsonString := jblTojson(meta)
 	return jsonString
-}
-
-func (e *EJDB) GetCollections() []string {
-	var collectionNames []string
-	meta := J{}
-	metaString := e.GetMeta()
-	if metaString == "" {
-		return collectionNames
-	}
-	err := json.Unmarshal([]byte(metaString), &meta)
-	if err != nil {
-		return collectionNames
-	}
-	for _, collectionJson := range meta["collections"].([]interface{}) {
-		coll := collectionJson.(J)
-		collectionNames = append(collectionNames, coll["name"].(string))
-	}
-	return collectionNames
 }
 
 func (e *EJDB) MergeOrPut(collectionName string, patchJSON string, entryID int64) error {
@@ -332,8 +313,7 @@ func newQuery(collectionName string, query string, params J) (C.JQL, func()) {
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println("panic occurred during query building:", err)
-			fmt.Println("freeing allocated pointers")
+			fmt.Println("Error creating query", err)
 			freeFunc()
 		}
 	}()
@@ -391,8 +371,7 @@ func newRawQuery(collectionName string, query string) (C.JQL, func()) {
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println("panic occurred during query building:", err)
-			fmt.Println("freeing allocated pointers")
+			fmt.Println("Error creating query", err)
 			freeFunc()
 		}
 	}()
