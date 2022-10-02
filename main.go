@@ -35,6 +35,15 @@ type EJDB struct {
 	db C.EJDB
 }
 
+type IndexMode uint8
+
+const (
+	Unique  uint8 = 0x01
+	String        = 0x04
+	Integer       = 0x08
+	Float         = 0x10
+)
+
 var visitorCallback func(jsonRecord string)
 
 //export goVisitor
@@ -176,9 +185,19 @@ func (e *EJDB) Patch(collectionName string, patchJSON string, entryID int64) err
 	return Check(rc)
 }
 
-func (e *EJDB) Update(collectionName string, query string, params J) error {
+func (e *EJDB) UpdateWithArguments(collectionName string, query string, params J) error {
 	q, free := newQuery(collectionName, query, params)
 	defer free()
+	return e.updateRecord(q)
+}
+
+func (e *EJDB) Update(collectionName string, query string) error {
+	q, free := newRawQuery(collectionName, query)
+	defer free()
+	return e.updateRecord(q)
+}
+
+func (e *EJDB) updateRecord(q C.JQL) error {
 	rc := C.ejdb_update(e.db, q)
 	return Check(rc)
 }
@@ -207,27 +226,38 @@ func (e *EJDB) GetByID(collectionName string, id int64) string {
 	return jsonString
 }
 
-func (e *EJDB) Get(collectionName string, query string, params J, visitor func(string)) error {
-	var resultList C.EJDB_LIST
+func (e *EJDB) Get(collectionName string, query string, visitor func(string)) error {
+	visitorCallback = visitor
+	q, free := newRawQuery(collectionName, query)
+	defer free()
+	return e.getRecords(q)
+}
+
+func (e *EJDB) GetWithArguments(collectionName string, query string, params J, visitor func(string)) error {
 	visitorCallback = visitor
 	q, free := newQuery(collectionName, query, params)
-	queryCString := C.CString(query)
-	collectionCString := C.CString(collectionName)
-	defer func() {
-		free()
-		C.ejdb_list_destroy(&resultList)
-		C.free(unsafe.Pointer(collectionCString))
-		C.free(unsafe.Pointer(queryCString))
-	}()
+	defer free()
+	return e.getRecords(q)
+}
 
+func (e *EJDB) getRecords(q C.JQL) error {
 	rc := C.execute_query(e.db, q)
-	//rc := C.ejdb_list2(e.db, collectionCString, queryCString, limit, &resultList)
 	return Check(rc)
 }
 
-func (e *EJDB) Count(collectionName string, query string, params J) int64 {
+func (e *EJDB) Count(collectionName string, query string) int64 {
+	q, free := newRawQuery(collectionName, query)
+	defer free()
+	return e.countRecords(q)
+}
+
+func (e *EJDB) CountWithArguments(collectionName string, query string, params J) int64 {
 	q, free := newQuery(collectionName, query, params)
 	defer free()
+	return e.countRecords(q)
+}
+
+func (e *EJDB) countRecords(q C.JQL) int64 {
 	var countValue C.longlong
 	rc := C.ejdb_count(e.db, q, &countValue, 0)
 	Check(rc)
@@ -291,15 +321,6 @@ func (e *EJDB) OnlineBackup(targetFile string) (uint64, error) {
 	return uint64(timeStamp), Check(rc)
 }
 
-type IndexMode uint8
-
-const (
-	Unique  uint8 = 0x01
-	String        = 0x04
-	Integer       = 0x08
-	Float         = 0x10
-)
-
 func newQuery(collectionName string, query string, params J) (C.JQL, func()) {
 	var q C.JQL
 	var allocatedPointers []unsafe.Pointer
@@ -356,6 +377,34 @@ func newQuery(collectionName string, query string, params J) (C.JQL, func()) {
 		Check(rc)
 	}
 
+	return q, freeFunc
+}
+
+func newRawQuery(collectionName string, query string) (C.JQL, func()) {
+	var q C.JQL
+	var allocatedPointers []unsafe.Pointer
+	freeFunc := func() {
+		for _, pointer := range allocatedPointers {
+			C.free(pointer)
+		}
+		C.jql_destroy(&q)
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("panic occurred during query building:", err)
+			fmt.Println("freeing allocated pointers")
+			freeFunc()
+		}
+	}()
+
+	collectionCString := C.CString(collectionName)
+	queryCString := C.CString(query)
+
+	allocatedPointers = append(allocatedPointers, unsafe.Pointer(collectionCString))
+	allocatedPointers = append(allocatedPointers, unsafe.Pointer(queryCString))
+
+	rc := C.jql_create(&q, collectionCString, queryCString)
+	Check(rc)
 	return q, freeFunc
 }
 

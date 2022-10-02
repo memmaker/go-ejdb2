@@ -28,10 +28,10 @@ func TestMemory(t *testing.T) {
 		assert.Equal(t, int64(1), id)
 		//fmt.Println("New record ID:", id)
 
-		count := db.Count("users", `/[age > :age]`, J{"age": 20})
+		count := db.Count("users", `/[age > 20]`)
 		assert.Equal(t, count, int64(1))
 		//fmt.Println("Count:", count)
-		err = db.Get("users", `/[age > :age]`, J{"age": 20}, func(record string) {
+		err = db.GetWithArguments("users", `/[age > :age]`, J{"age": 20}, func(record string) {
 			counter++
 		})
 		assert.NoError(t, err)
