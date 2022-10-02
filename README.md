@@ -2,7 +2,6 @@
 
 I found this neat little embeddable DB and wanted to use it in go.
 
-
 ## Requirements
 
 Make sure you have the dev headers of ejdb.

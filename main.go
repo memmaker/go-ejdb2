@@ -44,13 +44,13 @@ const (
 	Float         = 0x10
 )
 
-var visitorCallback func(jsonRecord string)
+var visitorCallback func(id int64, jsonRecord string)
 
 //export goVisitor
 func goVisitor(doc C.EJDB_DOC, step *C.longlong) {
 	output := jblTojson(doc.raw)
 	if visitorCallback != nil {
-		visitorCallback(output)
+		visitorCallback(int64(doc.id), output)
 	}
 }
 
@@ -226,14 +226,14 @@ func (e *EJDB) GetByID(collectionName string, id int64) string {
 	return jsonString
 }
 
-func (e *EJDB) Get(collectionName string, query string, visitor func(string)) error {
+func (e *EJDB) Get(collectionName string, query string, visitor func(int64, string)) error {
 	visitorCallback = visitor
 	q, free := newRawQuery(collectionName, query)
 	defer free()
 	return e.getRecords(q)
 }
 
-func (e *EJDB) GetWithArguments(collectionName string, query string, params J, visitor func(string)) error {
+func (e *EJDB) GetWithArguments(collectionName string, query string, params J, visitor func(int64, string)) error {
 	visitorCallback = visitor
 	q, free := newQuery(collectionName, query, params)
 	defer free()

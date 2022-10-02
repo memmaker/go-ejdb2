@@ -1,6 +1,7 @@
 package ejdb2
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -26,12 +27,21 @@ func TestMemory(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEmpty(t, id)
 		assert.Equal(t, int64(1), id)
+
+		id, err = db.PutNew("users", `{"name": "Marta", "age": 29}`)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, id)
+		assert.Equal(t, int64(2), id)
+
+		db.Get("users", `/=[1, 2]`, func(id int64, entry string) {
+			fmt.Println("Entry:", entry)
+		})
 		//fmt.Println("New record ID:", id)
 
 		count := db.Count("users", `/[age > 20]`)
-		assert.Equal(t, count, int64(1))
+		assert.Equal(t, count, int64(2))
 		//fmt.Println("Count:", count)
-		err = db.GetWithArguments("users", `/[age > :age]`, J{"age": 20}, func(record string) {
+		err = db.GetWithArguments("users", `/[age > :age]`, J{"age": 20}, func(id int64, record string) {
 			counter++
 		})
 		assert.NoError(t, err)
