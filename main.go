@@ -1,13 +1,9 @@
 package ejdb2
 
-import "C"
-import "fmt"
-
 // #cgo LDFLAGS: -lejdb2
 // #include <stdlib.h>
 // #include <ejdb2/ejdb2.h>
 // #include <ejdb2/iowow/iwkv.h>
-// #include <ejdb2/iowow/iwlog.h>
 // extern void goVisitor(EJDB_DOC doc, long long *step);
 // static inline unsigned long long goVisitorWrapper(EJDB_EXEC *ctx, EJDB_DOC doc, long long *step) {
 //   goVisitor(doc, step);
@@ -28,6 +24,8 @@ import "fmt"
 // }
 import "C"
 import (
+	"encoding/json"
+	"fmt"
 	"unsafe"
 )
 
@@ -41,7 +39,7 @@ var visitorCallback func(jsonRecord string)
 
 //export goVisitor
 func goVisitor(doc C.EJDB_DOC, step *C.longlong) {
-	output := jblTOjson(doc.raw)
+	output := jblTojson(doc.raw)
 	if visitorCallback != nil {
 		visitorCallback(output)
 	}
@@ -55,13 +53,17 @@ func Check(errorCode C.iwrc) {
 
 func (e *EJDB) Open(filename string) {
 	filenameCString := C.CString(filename)
-	defer C.free(unsafe.Pointer(filenameCString))
 	opts := C.EJDB_OPTS{
 		kv: C.IWKV_OPTS{
 			path: filenameCString,
 			//oflags: C.IWKV_TRUNC,
 		},
 	}
+	defer func() {
+		C.free(unsafe.Pointer(filenameCString))
+		//C.free(unsafe.Pointer(&opts))
+	}()
+
 	rc := C.ejdb_init()
 	Check(rc)
 	rc = C.ejdb_open(&opts, &e.db)
@@ -77,8 +79,23 @@ func (e *EJDB) GetMeta() string {
 	rc := C.ejdb_get_meta(e.db, &meta)
 	defer C.jbl_destroy(&meta)
 	Check(rc)
-	json := jblTOjson(meta)
-	return json
+	jsonString := jblTojson(meta)
+	return jsonString
+}
+
+func (e *EJDB) GetCollections() []string {
+	metaString := e.GetMeta()
+	meta := J{}
+	err := json.Unmarshal([]byte(metaString), &meta)
+	if err != nil {
+		return []string{}
+	}
+	var collectionNames []string
+	for _, collectionJson := range meta["collections"].([]interface{}) {
+		coll := collectionJson.(J)
+		collectionNames = append(collectionNames, coll["name"].(string))
+	}
+	return collectionNames
 }
 
 func (e *EJDB) MergeOrPut(collectionName string, patchJSON string, entryID int64) {
@@ -166,8 +183,8 @@ func (e *EJDB) GetByID(collectionName string, id int64) string {
 
 	rc := C.ejdb_get(e.db, collectionCString, C.int64_t(id), &jbl)
 	Check(rc)
-	json := jblTOjson(jbl)
-	return json
+	jsonString := jblTojson(jbl)
+	return jsonString
 }
 
 func (e *EJDB) Get(collectionName string, query string, params J, visitor func(string)) {
@@ -245,6 +262,17 @@ func (e *EJDB) RemoveIndex(collectionName string, path string, mode IndexMode) {
 	Check(rc)
 }
 
+func (e *EJDB) OnlineBackup(targetFile string) uint64 {
+	var timeStamp C.ulonglong
+	pathCString := C.CString(targetFile)
+	defer func() {
+		C.free(unsafe.Pointer(pathCString))
+	}()
+	rc := C.ejdb_online_backup(e.db, &timeStamp, pathCString)
+	Check(rc)
+	return uint64(timeStamp)
+}
+
 type IndexMode uint8
 
 const (
@@ -313,10 +341,10 @@ func newQuery(collectionName string, query string, params J) (C.JQL, func()) {
 	return q, freeFunc
 }
 
-func jblTOjson(jbl C.JBL) string {
+func jblTojson(jbl C.JBL) string {
 	xstr := C.jbl_to_json(jbl)
-	json := C.iwxstr_ptr(xstr)
+	jsonString := C.iwxstr_ptr(xstr)
 	defer C.iwxstr_destroy(xstr)
-	jsonGO := C.GoString(json)
+	jsonGO := C.GoString(jsonString)
 	return jsonGO
 }

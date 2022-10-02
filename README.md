@@ -15,7 +15,6 @@ cgo will be looking for these header files during compilation:
   - stdlib.h
   - ejdb2/ejdb2.h
   - ejdb2/iowow/iwkv.h
-  - ejdb2/iowow/iwlog.h
 
 ## Add to your project
 
@@ -42,3 +41,7 @@ func main() {
     fmt.Println(user)
 }
 ```
+
+## Documentation
+
+Please refer to the [ejdb2 documentation](https://github.com/Softmotions/ejdb/blob/master/src/ejdb2.h) for more information.

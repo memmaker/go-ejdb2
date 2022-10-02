@@ -10,9 +10,14 @@ func TestMemory(t *testing.T) {
 	db.Open("test.database")
 	defer db.Close()
 	counter := 0
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1; i++ {
 		db.EnsureCollection("users")
 		db.EnsureIndex("users", "/name", String)
+
+		collections := db.GetCollections()
+
+		assert.Equal(t, 1, len(collections))
+		assert.Equal(t, "users", collections[0])
 
 		id := db.PutNew("users", `{"name": "John", "age": 30}`)
 		assert.NotEmpty(t, id)
@@ -27,7 +32,7 @@ func TestMemory(t *testing.T) {
 		})
 		db.GetByID("users", id)
 		//fmt.Println("Entry from ID:", entryFromID)
-
+		db.OnlineBackup("test.database.bak")
 		//fmt.Println(db.GetMeta())
 
 		db.Del("users", id)
