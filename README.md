@@ -44,4 +44,7 @@ func main() {
 
 ## Documentation
 
-Please refer to the [ejdb2 documentation](https://github.com/Softmotions/ejdb/blob/master/src/ejdb2.h) for more information.
+Please refer to the ejdb2 documentation for more information:
+
+ - [ejdb2.h - Contains the documented C API](https://github.com/Softmotions/ejdb/blob/master/src/ejdb2.h)
+ - [JQL - The query language used by ejdb2](https://github.com/Softmotions/ejdb#jql)
