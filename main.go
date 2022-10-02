@@ -35,7 +35,7 @@ type EJDB struct {
 	db C.EJDB
 }
 
-type IndexMode uint8
+type IndexMode = uint8
 
 const (
 	Unique  uint8 = 0x01
