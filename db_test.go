@@ -8,7 +8,7 @@ import (
 
 func TestMemory(t *testing.T) {
 	var db EJDB
-	openError := db.Open("test.database")
+	openError := db.Open("test.database", Truncate)
 	assert.NoError(t, openError)
 	defer db.Close()
 	counter := 0
@@ -18,11 +18,8 @@ func TestMemory(t *testing.T) {
 		err = db.EnsureIndex("users", "/name", String)
 		assert.NoError(t, err)
 
-		collections := db.GetCollections()
-
-		assert.Equal(t, 1, len(collections))
-		assert.Equal(t, "users", collections[0])
-
+		metadata := db.GetMeta()
+		fmt.Println(metadata)
 		id, err := db.PutNew("users", `{"name": "John", "age": 30}`)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, id)

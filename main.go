@@ -43,6 +43,14 @@ const (
 	Float         = 0x10
 )
 
+type OpenMode = uint8
+
+const (
+	ReadOnly      uint8 = 0x02
+	Truncate            = 0x04
+	NoTrimOnClose       = 0x08
+)
+
 var visitorCallback func(id int64, jsonRecord string)
 
 //export goVisitor
@@ -60,12 +68,12 @@ func Check(errorCode C.iwrc) error {
 	return nil
 }
 
-func (e *EJDB) Open(filename string) error {
+func (e *EJDB) Open(filename string, mode OpenMode) error {
 	filenameCString := C.CString(filename)
 	opts := C.EJDB_OPTS{
 		kv: C.IWKV_OPTS{
-			path: filenameCString,
-			//oflags: C.IWKV_TRUNC,
+			path:   filenameCString,
+			oflags: C.iwkv_openflags(mode),
 		},
 	}
 	defer func() {
