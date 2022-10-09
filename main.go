@@ -333,8 +333,10 @@ func newQuery(collectionName string, query string, params J) (C.JQL, func()) {
 	allocatedPointers = append(allocatedPointers, unsafe.Pointer(queryCString))
 
 	rc := C.jql_create(&q, collectionCString, queryCString)
-	Check(rc)
-
+	jqlErr := Check(rc)
+	if jqlErr != nil {
+		panic(jqlErr)
+	}
 	for key, value := range params {
 		// NOTE: could probably be optimized by just passing the type along
 		keyCString := C.CString(key)
@@ -362,7 +364,10 @@ func newQuery(collectionName string, query string, params J) (C.JQL, func()) {
 			rc = C.jql_set_bool(q, keyCString, 0, value.(C.bool))
 			break
 		}
-		Check(rc)
+		setArgErr := Check(rc)
+		if setArgErr != nil {
+			panic(setArgErr)
+		}
 	}
 
 	return q, freeFunc
